@@ -9,6 +9,8 @@ use rust_sock::utils::{
 };
 use std::error::Error;
 use std::ffi::OsStr;
+use std::io::{self, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -130,11 +132,29 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let servers = matches
-            .values_of_os("server")
-            .map(|iter| iter.into_iter().map(|v| v.into()).collect())
-            .unwrap_or_else(|| vec![default::server()]);
+        let (_tmpdir, servers) = match matches.values_of_os("server") {
+            Some(iter) => (None, iter.into_iter().map(|v| v.into()).collect()),
+            None => {
+                let (tmpdir, path) = default::new_unix_path()?;
+                (Some(tmpdir), vec![path])
+            }
+        };
         spawn_listeners(&servers).await?;
+
+        {
+            let stdout = io::stdout();
+            let mut stdout = stdout.lock();
+            stdout.write(b"RUST_SOCK=")?;
+            stdout.write(
+                &servers
+                    .iter()
+                    .map(|s| s.as_bytes())
+                    .collect::<Vec<_>>()
+                    .join(&b":"[0]),
+            )?;
+            stdout.write(b"\n")?;
+            stdout.flush()?;
+        }
 
         signal::ctrl_c().await?;
         println!("ctrl-c received!");

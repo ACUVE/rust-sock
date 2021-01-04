@@ -8,7 +8,7 @@ use rust_sock::utils::{
 };
 use std::convert::AsRef;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
@@ -18,7 +18,7 @@ use tokio::net::{TcpSocket, UnixStream};
 use tokio::runtime;
 use tokio::time::timeout;
 
-async fn get_connection<S: AsRef<OsStr>>(
+async fn get_connection_impl<S: AsRef<OsStr>>(
     server: S,
 ) -> Result<(Box<dyn AsyncRead + Unpin>, Box<dyn AsyncWrite + Unpin>), Box<dyn Error>> {
     use ConnectionType::*;
@@ -42,6 +42,22 @@ async fn get_connection<S: AsRef<OsStr>>(
     }
 }
 
+async fn get_connection<T, U>(
+    servers: T,
+) -> Result<(Box<dyn AsyncRead + Unpin>, Box<dyn AsyncWrite + Unpin>), Box<dyn Error>>
+where
+    T: IntoIterator<Item = U>,
+    U: AsRef<OsStr>,
+{
+    for server in servers.into_iter() {
+        let ret = get_connection_impl(server).await;
+        if ret.is_ok() {
+            return ret;
+        }
+    }
+    Err("Cannot connect all servers".into())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let app = clap_app!(client =>
         (@arg server: -s --server +takes_value "Server")
@@ -50,13 +66,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             (about: "Send file to Server")
             (@arg FILE: +required "Sent file")
         )
+        (@subcommand Echo =>
+            (about: "Output on Server")
+            (@arg STRING: +required "String to be show")
+        )
     );
     let matches = app.get_matches();
 
-    let server = matches
-        .value_of_os("server")
-        .map(OsString::from)
-        .unwrap_or_else(default::server);
+    let servers = match matches.values_of_os("server") {
+        Some(servers) => servers.map(OsStr::to_os_string).collect(),
+        None => default::server().unwrap(),
+    };
     let timeout_sec = match matches.value_of("timeout") {
         Some(ref str) => str.parse().expect("cannot parse timeout"),
         None => 10,
@@ -66,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let (mut read, mut write) = get_connection(&server).await?;
+        let (mut read, mut write) = get_connection(servers.iter()).await?;
 
         let req = match matches.subcommand() {
             ("SendFile", Some(sub)) => {
@@ -79,6 +99,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     filename: filepath.file_name().unwrap().to_string_lossy().into_owned(),
                     data: buffer.into(),
                 }
+            }
+            ("Echo", Some(sub)) => {
+                let string = sub.value_of_lossy("STRING").unwrap().into();
+                Request::Echo { string }
             }
             (_unknown, Some(_sub)) => {
                 unimplemented!()

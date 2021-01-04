@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub enum Request {
     OpenVSCode { path: String },
     SendFile { filename: String, data: Box<[u8]> },
+    Echo { string: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -25,6 +25,10 @@ async fn handle(request: Request) -> Result<(), Box<dyn Error>> {
             file.write_all(data).await?;
             Ok(())
         }
+        Echo { ref string } => {
+            println!("Echo: string={}", string);
+            Ok(())
+        }
     }
 }
 
