@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let filepath = Path::new(sub.value_of_os("FILE").unwrap());
                 let mut file = fs::OpenOptions::new().read(true).open(&filepath).await?;
                 let filesize = file.metadata().await?.len();
-                let mut buffer = vec![0; filesize as usize];
+                let mut buffer = vec![0; filesize as _];
                 file.read_exact(&mut buffer).await?;
                 Request::SendFile {
                     filename: filepath.file_name().unwrap().to_string_lossy().into_owned(),

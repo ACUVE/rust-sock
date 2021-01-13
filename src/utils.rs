@@ -29,9 +29,9 @@ where
 {
     use ReadSerializedError::*;
 
-    match read.read_u64().await {
+    match read.read_u128().await {
         Ok(size) => {
-            let mut buff = vec![0u8; size as usize];
+            let mut buff = vec![0u8; size as _];
             read.read_exact(&mut buff).await.map_err(Io)?;
             bincode::deserialize::<O>(&buff).map_err(Bincode)
         }
@@ -66,7 +66,7 @@ where
 {
     use WriteSerializedError::*;
     let buff = bincode::serialize(&serializable).map_err(Bincode)?;
-    write.write_u64(buff.len() as u64).await.map_err(Io)?;
+    write.write_u128(buff.len() as _).await.map_err(Io)?;
     write.write_all(&buff).await.map_err(Io)?;
     write.flush().await.map_err(Io)?;
     Ok(())
