@@ -8,7 +8,7 @@ use tempfile::{tempdir, TempDir};
 pub fn server() -> Option<Box<[OsString]>> {
     var_os("RUST_SOCK").map(|s| {
         s.as_bytes()
-            .split(|v| v == &b":"[0])
+            .split(|v| v == &b","[0])
             .map(|t| <OsStr as OsStrExt>::from_bytes(t).to_os_string())
             .collect()
     })

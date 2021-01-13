@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     .iter()
                     .map(|s| s.as_bytes())
                     .collect::<Vec<_>>()
-                    .join(&b":"[0]),
+                    .join(&b","[0]),
             )?;
             stdout.write(b"\n")?;
             stdout.flush()?;

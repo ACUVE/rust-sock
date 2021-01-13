@@ -49,7 +49,7 @@ where
     T: IntoIterator<Item = U>,
     U: AsRef<OsStr>,
 {
-    for server in servers.into_iter() {
+    for server in servers {
         let ret = get_connection_impl(server).await;
         if ret.is_ok() {
             return ret;
