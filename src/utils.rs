@@ -1,8 +1,13 @@
+use super::connection::get_connection;
+use super::message::{Request, Response};
 use std::error::Error;
 use std::ffi::OsStr;
+use std::io::{self};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time;
 
 #[derive(Debug)]
 pub enum ReadSerializedError {
@@ -91,4 +96,39 @@ pub fn determine_connection_type<S: AsRef<OsStr>>(server_str: S) -> Option<Conne
         return Some(Unix(path.into()));
     }
     None
+}
+
+pub async fn ping_test_to_servers<'a, T, U>(servers: T) -> io::Result<bool>
+where
+    T: IntoIterator<Item = &'a U>,
+    U: AsRef<OsStr> + 'a,
+{
+    for server in servers {
+        match get_connection(&[server]).await {
+            Ok((mut read, mut write)) => {
+                match time::timeout(
+                    Duration::from_secs(1),
+                    write_serialized(&mut write, Request::Ping),
+                )
+                .await
+                {
+                    Ok(Err(WriteSerializedError::Io(err))) => return Err(err),
+                    Ok(Err(WriteSerializedError::Bincode(_))) => unreachable!(),
+                    Err(_) => return Ok(false),
+                    Ok(Ok(())) => (),
+                }
+                match time::timeout(Duration::from_secs(1), read_serialized(&mut read)).await {
+                    Ok(Err(ReadSerializedError::Io(err))) => return Err(err),
+                    Ok(Err(ReadSerializedError::Bincode(_)))
+                    | Ok(Err(ReadSerializedError::Closed))
+                    | Err(_) => return Ok(false),
+                    Ok(Ok(Response::Err(_))) => return Ok(false),
+                    Ok(Ok(Response::Ok)) => (),
+                }
+            }
+            Err(ref err) if err.kind() == io::ErrorKind::NotConnected => return Ok(false),
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(true)
 }

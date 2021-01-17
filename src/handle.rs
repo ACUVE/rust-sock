@@ -7,6 +7,7 @@ use tokio::io::AsyncWriteExt;
 async fn handle(request: Request) -> Result<(), Box<dyn Error>> {
     use Request::*;
     match request {
+        Ping => Ok(()),
         OpenVSCode { path: ref _path } => {
             unimplemented!()
         }

@@ -2,6 +2,7 @@ use std::env::var_os;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
 use std::{fs, io};
 use tempfile::{tempdir, TempDir};
 
@@ -22,4 +23,22 @@ pub fn new_unix_path() -> io::Result<(TempDir, OsString)> {
     fs::set_permissions(&path, permissions)?;
     path.push("sock");
     Ok((dir, path.into()))
+}
+
+pub fn application_dir() -> PathBuf {
+    let mut app_name = env!("CARGO_PKG_NAME");
+    if app_name.is_empty() {
+        app_name = "rust-sock";
+    }
+    match dirs::config_dir().or_else(dirs::runtime_dir) {
+        Some(mut buf) => {
+            buf.push(app_name);
+            buf
+        }
+        None => {
+            let mut buf = dirs::home_dir().unwrap();
+            buf.push(String::from(".") + app_name);
+            buf
+        }
+    }
 }

@@ -1,67 +1,26 @@
 extern crate rust_sock;
 
 use clap::clap_app;
+use rust_sock::connection::get_connection;
 use rust_sock::default;
 use rust_sock::message::{Request, Response};
-use rust_sock::utils::{
-    determine_connection_type, read_serialized, write_serialized, ConnectionType,
-};
-use std::convert::AsRef;
+use rust_sock::utils::{read_serialized, write_serialized};
 use std::error::Error;
 use std::ffi::OsStr;
-use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
 use tokio::fs;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
-use tokio::net::{TcpSocket, UnixStream};
+use tokio::io::AsyncReadExt;
 use tokio::runtime;
 use tokio::time::timeout;
-
-async fn get_connection_impl<S: AsRef<OsStr>>(
-    server: S,
-) -> Result<(Box<dyn AsyncRead + Unpin>, Box<dyn AsyncWrite + Unpin>), Box<dyn Error>> {
-    use ConnectionType::*;
-
-    match determine_connection_type(server) {
-        Some(Ip(addr)) => {
-            let socket = match addr {
-                SocketAddr::V4(_) => TcpSocket::new_v4()?,
-                SocketAddr::V6(_) => TcpSocket::new_v6()?,
-            };
-            let stream = socket.connect(addr).await?;
-            let (write, read) = stream.into_split();
-            Ok((Box::new(write), Box::new(read)))
-        }
-        Some(Unix(path)) => {
-            let stream = UnixStream::connect(path).await?;
-            let (write, read) = stream.into_split();
-            Ok((Box::new(write), Box::new(read)))
-        }
-        None => Err("Unkown server".into()),
-    }
-}
-
-async fn get_connection<T, U>(
-    servers: T,
-) -> Result<(Box<dyn AsyncRead + Unpin>, Box<dyn AsyncWrite + Unpin>), Box<dyn Error>>
-where
-    T: IntoIterator<Item = U>,
-    U: AsRef<OsStr>,
-{
-    for server in servers {
-        let ret = get_connection_impl(server).await;
-        if ret.is_ok() {
-            return ret;
-        }
-    }
-    Err("Cannot connect all servers".into())
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let app = clap_app!(client =>
         (@arg server: -s --server +takes_value "Server")
         (@arg timeout: -t --timeout +takes_value "Timeout seconds")
+        (@subcommand Ping =>
+            (about: "Do nothing")
+        )
         (@subcommand SendFile =>
             (about: "Send file to Server")
             (@arg FILE: +required "Sent file")
@@ -89,6 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let (mut read, mut write) = get_connection(servers.iter()).await?;
 
         let req = match matches.subcommand() {
+            ("Ping", Some(_)) => Request::Ping,
             ("SendFile", Some(sub)) => {
                 let filepath = Path::new(sub.value_of_os("FILE").unwrap());
                 let mut file = fs::OpenOptions::new().read(true).open(&filepath).await?;
